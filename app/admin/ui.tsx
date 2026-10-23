@@ -10,7 +10,7 @@ export default function Admin(){
  async function request(path:string,method='GET',body?:unknown,auth=token){
   const response=await fetch('/api/admin'+path,{method,headers:{Authorization:`Bearer ${auth}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
   const raw=await response.text();let data:any;try{data=JSON.parse(raw)}catch{throw Error('HTTP '+response.status+': '+raw.slice(0,180))}
-  if(!response.ok)throw Error(data.error||'Request failed');return data;
+  if(!response.ok)throw Error([data.error,data.details].filter(Boolean).join(': ')||'Request failed');return data;
  }
  async function load(auth=token){try{const r=await request('','GET',undefined,auth);if(r.site)setSite(r.site)}catch(e){setMessage(String(e))}}
  useEffect(()=>{if(!client)return;client.auth.getSession().then(({data})=>{if(data.session){setToken(data.session.access_token);load(data.session.access_token)}});const {data:sub}=client.auth.onAuthStateChange((_evt,session)=>setToken(session?.access_token||''));return ()=>sub.subscription.unsubscribe()},[]);
