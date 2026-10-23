@@ -1,0 +1,45 @@
+name: Omar Watch Collection
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: omar-watch-collection
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Invoke production collection
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          COLLECTION_URL: https://news-agg-bookfic.vercel.app/api/cron
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Configure repository Actions secret CRON_SECRET (same value as the Vercel CRON_SECRET)."
+            exit 1
+          fi
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --location --max-time 180 \
+            --retry 2 --retry-delay 8 --retry-all-errors \
+            --output "$response_file" --write-out '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Accept: application/json" \
+            "$COLLECTION_URL")"
+          if [ "$status" != "200" ]; then
+            echo "::error::Collection request returned HTTP $status"
+            cat "$response_file"
+            exit 1
+          fi
+          cat "$response_file"
+          if ! jq -e '.errors | type == "array" and length == 0' "$response_file" >/dev/null; then
+            echo "::error::Collection reported errors or an invalid response."
+            exit 1
+          fi
