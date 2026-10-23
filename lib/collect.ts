@@ -13,7 +13,7 @@ export async function runCollection(){
  const deadline=Date.now()+35000;
  const queries=String(site.data.search_queries||site.data.topic_description||'').split(/\r?\n/).map((s:string)=>s.trim()).filter(Boolean).slice(0,5);
  if(!queries.length)throw Error('Configure at least one search query');
- let discovered=0,evaluated=0,searches=0,resultsSeen=0;
+ let discovered=0,evaluated=0,deleted=0,searches=0,resultsSeen=0;
  const limit=Math.max(1,Math.min(50,Number(site.data.search_result_limit)||20));
  const freshness=['pd','pw','pm','py'].includes(site.data.search_freshness)?site.data.search_freshness:'pw';
  for(const query of queries){
@@ -49,7 +49,7 @@ export async function runCollection(){
  }
  // Only new search-discovered items enter this queue; historical RSS backlog remains untouched.
  const pending=await client.from('articles').select('id,title,description,published_at').eq('search_discovered',true)
-  .eq('status','review').is('evaluation_reason',null).order('created_at',{ascending:false}).limit(12);
+  .eq('status','review').is('evaluation_reason',null).order('created_at',{ascending:false}).limit(20);
  if(pending.error)errors.push('Queue: '+pending.error.message);
  for(const article of pending.data||[]){
   if(Date.now()>deadline-4000)break;
@@ -57,15 +57,21 @@ export async function runCollection(){
    const score=await evaluate(article.title,article.description||'',site.data);
    const age=article.published_at?Math.max(0,(Date.now()-Date.parse(article.published_at))/86400000):30;
    const topScore=.4*score.relevance+.3*score.significance+.2*Math.max(0,100-age*7);
+   if(score.relevance<(site.data.relevance_threshold??70)){
+    const removed=await client.from('articles').delete().eq('id',article.id);
+    if(removed.error)throw Error(removed.error.message);
+    deleted++;evaluated++;
+    continue;
+   }
    const saved=await client.from('articles').update({summary:score.summary,relevance:score.relevance,significance:score.significance,
-    top_score:topScore,evaluation_reason:score.reason||'Evaluated',status:score.relevance>=(site.data.relevance_threshold??70)?'published':'review'}).eq('id',article.id);
+    top_score:topScore,evaluation_reason:score.reason||'Evaluated',status:'published'}).eq('id',article.id);
    if(saved.error)throw Error(saved.error.message);
-   if(score.relevance>=(site.data.relevance_threshold??70)){try{await assignStory(client,{id:article.id,title:article.title,published_at:article.published_at,description:article.description})}catch(e){errors.push('Story grouping: '+String(e))}}
+   try{await assignStory(client,{id:article.id,title:article.title,published_at:article.published_at,description:article.description})}catch(e){errors.push('Story grouping: '+String(e))}
    evaluated++;
   }catch(e){errors.push('AI evaluation: '+String(e));break}
  }
  const count=await client.from('articles').select('id',{count:'exact',head:true}).eq('search_discovered',true).eq('status','review').is('evaluation_reason',null);
  const pendingEvaluations=count.count||0;
  if(run.data)await client.from('collection_runs').update({finished_at:new Date().toISOString(),articles_created:discovered,errors}).eq('id',run.data.id);
- return {created:discovered,discovered,evaluated,pendingEvaluations,searches,resultsSeen,errors};
+ return {created:discovered,discovered,evaluated,deleted,pendingEvaluations,searches,resultsSeen,errors};
 }
