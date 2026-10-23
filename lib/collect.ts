@@ -2,7 +2,7 @@ import {db} from '@/lib/db';
 import {evaluate} from '@/lib/curate';
 import {decodeHtmlEntities} from '@/lib/fetch';
 import {assignStory} from '@/lib/story-store';
-type NewsResult={title?:string;url?:string;description?:string;page_age?:string;profile?:{name?:string}};
+type NewsResult={title?:string;url?:string;description?:string;page_age?:string;profile?:{name?:string};thumbnail?:{src?:string;original?:string}};
 export async function runCollection(){
  const client=db(),errors:string[]=[];
  const run=await client.from('collection_runs').insert({}).select('id').single();
@@ -37,7 +37,9 @@ export async function runCollection(){
      const description=decodeHtmlEntities(item.description||'').replace(/<[^>]*>/g,' ').slice(0,1500);
      const domain=link.hostname.replace(/^www\./,'');
      const originalDate=item.page_age&&Number.isFinite(Date.parse(item.page_age))?new Date(item.page_age).toISOString():null;
-     const row={url:normalized,title,description,published_at:originalDate,source_name:(item.profile?.name||domain).slice(0,200),source_id:null,status:'review',image_allowed:false,search_discovered:true};
+     let thumb:string|null=null;
+     try{const raw=item.thumbnail?.src||item.thumbnail?.original;if(raw){const u=new URL(raw);if(u.protocol==='https:'&&!u.username&&!u.password)thumb=u.href.slice(0,2000)}}catch{}
+     const row={image_url:thumb,url:normalized,title,description,published_at:originalDate,source_name:(item.profile?.name||domain).slice(0,200),source_id:null,status:'review',image_allowed:false,search_discovered:true};
      const inserted=await client.from('articles').insert(row);
      if(inserted.error&&inserted.error.code!=='23505')throw Error(inserted.error.message);
      if(!inserted.error)discovered++;

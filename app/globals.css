@@ -3,3 +3,5 @@
 
 /* Story headline links retain the heading style, including on hover. */
 .content-page article h1 a,.content-page article h1 a:hover,.content-page article h1 a:focus{text-decoration:none}
+
+.story-hero{display:block;width:100%;height:auto;max-height:400px;object-fit:cover;border-radius:5px;margin:20px 0}.image-review{display:flex;align-items:flex-start;gap:16px;margin:15px 0;padding:12px 0;border-bottom:1px solid #d8d1c4}.image-review img{width:120px;height:80px;object-fit:cover;border-radius:4px}.image-review strong{display:block;margin-bottom:8px}@media(max-width:600px){.image-review{flex-direction:column}}
