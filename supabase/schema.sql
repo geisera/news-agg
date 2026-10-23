@@ -14,3 +14,7 @@ alter table articles enable row level security;
 alter table collection_runs enable row level security;
 -- All database operations are server-side with the service role; do not expose that key to browsers.
 alter table site_settings add column if not exists articles_per_source integer not null default 20 check(articles_per_source between 1 and 50);
+
+-- Preserve publisher attribution if approved RSS sources are removed.
+alter table articles add column if not exists source_name text;
+alter table articles alter column source_id drop not null;
