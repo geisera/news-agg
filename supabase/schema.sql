@@ -31,3 +31,18 @@ alter table public.stories enable row level security;
 alter table public.articles add column if not exists story_id uuid references public.stories(id) on delete set null;
 create index if not exists articles_story_id_idx on public.articles(story_id);
 create index if not exists stories_updated_idx on public.stories(last_updated_at desc);
+
+-- Atomic reset of news content. Invocation restricted to service_role; admin auth checked in API.
+create or replace function public.purge_news_content()
+returns jsonb language plpgsql security invoker set search_path = ''
+as $$
+declare article_count bigint; story_count bigint; run_count bigint;
+begin
+ select count(*) into article_count from public.articles;
+ select count(*) into story_count from public.stories;
+ select count(*) into run_count from public.collection_runs;
+ truncate table public.articles,public.stories,public.collection_runs;
+ return jsonb_build_object('articles',article_count,'stories',story_count,'collectionRuns',run_count);
+end; $$;
+revoke all on function public.purge_news_content() from public,anon,authenticated;
+grant execute on function public.purge_news_content() to service_role;

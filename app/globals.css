@@ -12,3 +12,5 @@ a:any-link:hover{color:#985a2d;text-decoration:none}
 a:any-link:focus-visible{outline:2px solid #985a2d;outline-offset:3px;border-radius:2px;text-decoration:none}
 a.btn:any-link:hover{color:#fff;opacity:.85}
 @media(prefers-reduced-motion:reduce){a:any-link{transition:none}}
+
+.danger-panel{border-color:#ad6257}.danger-button{background:#9b3427}.danger-button:hover{background:#7c281f}.danger-button:disabled{opacity:.45;cursor:not-allowed}
