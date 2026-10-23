@@ -18,3 +18,9 @@ alter table site_settings add column if not exists articles_per_source integer n
 -- Preserve publisher attribution if approved RSS sources are removed.
 alter table articles add column if not exists source_name text;
 alter table articles alter column source_id drop not null;
+
+-- Brave News Search configuration and search-only evaluation queue.
+alter table site_settings add column if not exists search_queries text not null default '';
+alter table site_settings add column if not exists search_freshness text not null default 'pw';
+alter table site_settings add column if not exists search_result_limit integer not null default 20;
+alter table articles add column if not exists search_discovered boolean not null default false;
