@@ -13,7 +13,7 @@ export async function runCollection(){
  const deadline=Date.now()+35000;
  const remaining=()=>deadline-Date.now();
  const threshold=site.data.relevance_threshold??70;
- const queries=String(site.data.search_queries||site.data.topic_description||'').split(/\\r?\\n/).map((s:string)=>s.trim()).filter(Boolean).slice(0,5);
+ const queries=String(site.data.search_queries||site.data.topic_description||'').split(/\r?\n/).map((s:string)=>s.trim()).filter(Boolean).slice(0,5);
  let discovered=0,evaluated=0,deleted=0,published=0,grouped=0,searches=0,resultsSeen=0;
  const pendingQuery=()=>client.from('articles').select('id,title,description,published_at').eq('search_discovered',true).eq('status','review').is('evaluation_reason',null).order('created_at',{ascending:true});
  const countBefore=await client.from('articles').select('id',{count:'exact',head:true}).eq('search_discovered',true).eq('status','review').is('evaluation_reason',null);
@@ -86,7 +86,7 @@ export async function runCollection(){
       if(score.relevance<threshold){deleted++;continue}
       let image_url:string|null=null;
       try{const raw=item.thumbnail?.src||item.thumbnail?.original;if(raw){const u=new URL(raw);if(u.protocol==='https:'&&!u.username&&!u.password)image_url=u.href.slice(0,2000)}}catch{}
-      const row={url,title,description,published_at:date,source_name:(item.profile?.name||link.hostname.replace(/^www\\./,'')).slice(0,200),source_id:null,status:'published',summary:score.summary,relevance:score.relevance,significance:score.significance,top_score:calculateTop(score,date),evaluation_reason:score.reason||'Evaluated',image_url,image_allowed:false,search_discovered:true};
+      const row={url,title,description,published_at:date,source_name:(item.profile?.name||link.hostname.replace(/^www\./,'')).slice(0,200),source_id:null,status:'published',summary:score.summary,relevance:score.relevance,significance:score.significance,top_score:calculateTop(score,date),evaluation_reason:score.reason||'Evaluated',image_url,image_allowed:false,search_discovered:true};
       const inserted=await client.from('articles').insert(row).select('id').single();
       if(inserted.error){if(inserted.error.code!=='23505')throw inserted.error;continue}
       published++;await group(inserted.data.id,title,date,description);
