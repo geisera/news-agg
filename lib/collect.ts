@@ -13,10 +13,15 @@ export async function runCollection(){
  const deadline=Date.now()+35000;
  const queries=String(site.data.search_queries||site.data.topic_description||'').split(/\r?\n/).map((s:string)=>s.trim()).filter(Boolean).slice(0,5);
  if(!queries.length)throw Error('Configure at least one search query');
- let discovered=0,evaluated=0,deleted=0,searches=0,resultsSeen=0;
+ let discovered=0,evaluated=0,deleted=0,published=0,grouped=0,searches=0,resultsSeen=0;
+ const queueBefore=await client.from('articles').select('id',{count:'exact',head:true}).eq('search_discovered',true).eq('status','review').is('evaluation_reason',null);
+ if(queueBefore.error)throw Error('Pending queue count: '+queueBefore.error.message);
+ let queueSize=queueBefore.count||0;
+ let discoveryPaused=queueSize>25;
  const limit=Math.max(1,Math.min(50,Number(site.data.search_result_limit)||20));
  const freshness=['pd','pw','pm','py'].includes(site.data.search_freshness)?site.data.search_freshness:'pw';
  for(const query of queries){
+  if(queueSize>25){discoveryPaused=true;break}
   if(Date.now()>deadline-15000)break;
   try{
    const params=new URLSearchParams({q:query.slice(0,400),count:String(limit),freshness,country:'US',search_lang:'en'});
@@ -26,7 +31,7 @@ export async function runCollection(){
    const data=await res.json() as {results?:NewsResult[]};
    searches++;
    for(const item of data.results||[]){
-    if(Date.now()>deadline-12000)break;
+    if(Date.now()>deadline-12000||queueSize>25)break;
     resultsSeen++;
     if(!item.title||!item.url)continue;
     try{
@@ -42,7 +47,7 @@ export async function runCollection(){
      const row={image_url:thumb,url:normalized,title,description,published_at:originalDate,source_name:(item.profile?.name||domain).slice(0,200),source_id:null,status:'review',image_allowed:false,search_discovered:true};
      const inserted=await client.from('articles').insert(row);
      if(inserted.error&&inserted.error.code!=='23505')throw Error(inserted.error.message);
-     if(!inserted.error)discovered++;
+     if(!inserted.error){discovered++;queueSize++}
     }catch(e){errors.push('Result: '+String(e))}
    }
   }catch(e){errors.push('Search: '+String(e))}
@@ -66,12 +71,13 @@ export async function runCollection(){
    const saved=await client.from('articles').update({summary:score.summary,relevance:score.relevance,significance:score.significance,
     top_score:topScore,evaluation_reason:score.reason||'Evaluated',status:'published'}).eq('id',article.id);
    if(saved.error)throw Error(saved.error.message);
-   try{await assignStory(client,{id:article.id,title:article.title,published_at:article.published_at,description:article.description})}catch(e){errors.push('Story grouping: '+String(e))}
+   published++;
+   try{const storyId=await assignStory(client,{id:article.id,title:article.title,published_at:article.published_at,description:article.description});const story=await client.from('stories').select('canonical_article_id').eq('id',storyId).single();if(story.error)throw story.error;if(story.data.canonical_article_id!==article.id)grouped++}catch(e){errors.push('Story grouping: '+String(e))}
    evaluated++;
   }catch(e){errors.push('AI evaluation: '+String(e));break}
  }
  const count=await client.from('articles').select('id',{count:'exact',head:true}).eq('search_discovered',true).eq('status','review').is('evaluation_reason',null);
  const pendingEvaluations=count.count||0;
  if(run.data)await client.from('collection_runs').update({finished_at:new Date().toISOString(),articles_created:discovered,errors}).eq('id',run.data.id);
- return {created:discovered,discovered,evaluated,deleted,pendingEvaluations,searches,resultsSeen,errors};
+ return {created:discovered,discovered,evaluated,deleted,published,grouped,pendingEvaluations,queueBefore:queueBefore.count||0,discoveryPaused,searches,resultsSeen,errors};
 }
