@@ -13,3 +13,4 @@ alter table sources enable row level security;
 alter table articles enable row level security;
 alter table collection_runs enable row level security;
 -- All database operations are server-side with the service role; do not expose that key to browsers.
+alter table site_settings add column if not exists articles_per_source integer not null default 20 check(articles_per_source between 1 and 50);
