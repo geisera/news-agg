@@ -20,10 +20,15 @@ jobs:
       - name: Invoke production collection
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           COLLECTION_URL: https://news-agg-bookfic.vercel.app/api/cron
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::error::Configure repository Actions secret CRON_SECRET (same value as the Vercel CRON_SECRET)."
+            exit 1
+          fi
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "::error::Set VERCEL_AUTOMATION_BYPASS_SECRET from Vercel Settings > Deployment Protection > Protection Bypass for Automation."
             exit 1
           fi
           response_file="$(mktemp)"
@@ -31,11 +36,12 @@ jobs:
             --retry 2 --retry-delay 8 --retry-all-errors \
             --output "$response_file" --write-out '%{http_code}' \
             -H "Authorization: Bearer $CRON_SECRET" \
+            -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
             -H "Accept: application/json" \
             "$COLLECTION_URL")"
           if [ "$status" != "200" ]; then
             echo "::error::Collection request returned HTTP $status"
-            cat "$response_file"
+            jq -c '{error: .error, details: .details}' "$response_file" 2>/dev/null || echo "Request failed before application authentication."
             exit 1
           fi
           cat "$response_file"
