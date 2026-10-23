@@ -12,6 +12,29 @@ export async function runCollection(){
  const timeLeft=()=>Date.now()<deadline;
  const site=await client.from('site_settings').select('*').eq('id',1).single();
  if(site.error)throw Error(site.error.message);
+ // Evaluate pending articles first so discovery cannot starve publication.
+ const maxEvaluations=12;
+ if(timeLeft()){
+  const pending=await client.from('articles').select('id,title,description,published_at')
+   .eq('status','review').is('evaluation_reason',null).order('created_at',{ascending:true}).limit(maxEvaluations);
+  if(pending.error)errors.push('Pending lookup: '+pending.error.message);
+  for(const article of pending.data||[]){
+   if(!timeLeft())break;
+   try{
+    const assessment=await evaluate(article.title,article.description||'',site.data);
+    const threshold=site.data?.relevance_threshold??70;
+    const age=article.published_at?Math.max(0,(Date.now()-new Date(article.published_at).getTime())/86400000):30;
+    const score=.4*assessment.relevance+.3*assessment.significance+.2*Math.max(0,100-age*7);
+    const updated=await client.from('articles').update({
+     summary:assessment.summary,relevance:assessment.relevance,significance:assessment.significance,
+     top_score:score,evaluation_reason:assessment.reason||'Evaluated',
+     status:assessment.relevance>=threshold?'published':'review'
+    }).eq('id',article.id);
+    if(updated.error)throw Error(updated.error.message);
+    evaluated++;
+   }catch(e){errors.push('Evaluation: '+String(e));break}
+  }
+ }
  const feeds=await client.from('sources').select('*',{count:'exact'}).eq('enabled',true)
   .order('last_checked_at',{ascending:true,nullsFirst:true}).order('id',{ascending:true}).limit(5);
  if(feeds.error)throw Error(feeds.error.message);
@@ -44,29 +67,6 @@ export async function runCollection(){
   }catch(e){
    errors.push(source.name+': '+String(e));
    await client.from('sources').update({last_checked_at:new Date().toISOString(),last_error:String(e)}).eq('id',source.id);
-  }
- }
- // AI processing consumes the remaining request budget; queue is persistent.
- const maxEvaluations=12;
- if(timeLeft()){
-  const pending=await client.from('articles').select('id,title,description,published_at')
-   .eq('status','review').is('evaluation_reason',null).order('created_at',{ascending:true}).limit(maxEvaluations);
-  if(pending.error)errors.push('Pending lookup: '+pending.error.message);
-  for(const article of pending.data||[]){
-   if(!timeLeft())break;
-   try{
-    const assessment=await evaluate(article.title,article.description||'',site.data);
-    const threshold=site.data?.relevance_threshold??70;
-    const age=article.published_at?Math.max(0,(Date.now()-new Date(article.published_at).getTime())/86400000):30;
-    const score=.4*assessment.relevance+.3*assessment.significance+.2*Math.max(0,100-age*7);
-    const updated=await client.from('articles').update({
-     summary:assessment.summary,relevance:assessment.relevance,significance:assessment.significance,
-     top_score:score,evaluation_reason:assessment.reason||'Evaluated',
-     status:assessment.relevance>=threshold?'published':'review'
-    }).eq('id',article.id);
-    if(updated.error)throw Error(updated.error.message);
-    evaluated++;
-   }catch(e){errors.push('Evaluation: '+String(e));break}
   }
  }
  const queue=await client.from('articles').select('id',{count:'exact',head:true})
