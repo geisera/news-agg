@@ -24,3 +24,10 @@ alter table site_settings add column if not exists search_queries text not null 
 alter table site_settings add column if not exists search_freshness text not null default 'pw';
 alter table site_settings add column if not exists search_result_limit integer not null default 20;
 alter table articles add column if not exists search_discovered boolean not null default false;
+
+-- Persistent story-level clustering (server-side writes only).
+create table if not exists public.stories(id uuid primary key default gen_random_uuid(),slug text not null unique,headline text not null,canonical_article_id uuid,first_reported_at timestamptz,last_updated_at timestamptz not null default now(),created_at timestamptz not null default now());
+alter table public.stories enable row level security;
+alter table public.articles add column if not exists story_id uuid references public.stories(id) on delete set null;
+create index if not exists articles_story_id_idx on public.articles(story_id);
+create index if not exists stories_updated_idx on public.stories(last_updated_at desc);

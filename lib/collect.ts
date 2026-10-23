@@ -1,6 +1,7 @@
 import {db} from '@/lib/db';
 import {evaluate} from '@/lib/curate';
 import {decodeHtmlEntities} from '@/lib/fetch';
+import {assignStory} from '@/lib/story-store';
 type NewsResult={title?:string;url?:string;description?:string;page_age?:string;profile?:{name?:string}};
 export async function runCollection(){
  const client=db(),errors:string[]=[];
@@ -57,6 +58,7 @@ export async function runCollection(){
    const saved=await client.from('articles').update({summary:score.summary,relevance:score.relevance,significance:score.significance,
     top_score:topScore,evaluation_reason:score.reason||'Evaluated',status:score.relevance>=(site.data.relevance_threshold??70)?'published':'review'}).eq('id',article.id);
    if(saved.error)throw Error(saved.error.message);
+   if(score.relevance>=(site.data.relevance_threshold??70)){try{await assignStory(client,{id:article.id,title:article.title,published_at:article.published_at})}catch(e){errors.push('Story grouping: '+String(e))}}
    evaluated++;
   }catch(e){errors.push('AI evaluation: '+String(e));break}
  }
