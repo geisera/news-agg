@@ -1,0 +1,2 @@
+import {NextRequest,NextResponse} from 'next/server';import {isAdmin} from '@/lib/auth';import {discover} from '@/lib/fetch';
+export async function POST(req:NextRequest){if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});try{const {url}=await req.json();if(typeof url!=='string'||url.length>2048)throw Error('Invalid URL');return NextResponse.json({feeds:await discover(url)})}catch(e){return NextResponse.json({error:String(e)},{status:400})}}

@@ -1,0 +1,4 @@
+import {createClient} from '@supabase/supabase-js';
+export function db(){const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!url||!key)throw Error('Missing Supabase server configuration');return createClient(url,key,{auth:{persistSession:false}})}
+export type Article={id:string;title:string;url:string;summary:string|null;published_at:string|null;image_url:string|null;image_allowed:boolean;source:{name:string}|{name:string}[]|null};
+export function publisher(a:Article){return Array.isArray(a.source)?a.source[0]?.name:a.source?.name||'Source'}

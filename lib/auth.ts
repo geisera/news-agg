@@ -1,0 +1,5 @@
+import {NextRequest} from 'next/server';
+import {createClient} from '@supabase/supabase-js';
+import {db} from './db';
+export async function isAdmin(req:NextRequest){const token=req.headers.get('authorization')?.match(/^Bearer (.+)$/i)?.[1];if(!token)return false;const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const anon=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;if(!url||!anon)return false;const auth=createClient(url,anon,{auth:{persistSession:false}});const {data,error}=await auth.auth.getUser(token);if(error||!data.user)return false;const row=await db().from('administrators').select('user_id').eq('user_id',data.user.id).maybeSingle();return Boolean(row.data)}
+export function isCron(req:NextRequest){return Boolean(process.env.CRON_SECRET&&req.headers.get('authorization')===`Bearer ${process.env.CRON_SECRET}`)}
