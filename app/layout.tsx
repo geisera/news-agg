@@ -1,4 +1,5 @@
 import './globals.css';
 import type {Metadata} from 'next';
-export const metadata:Metadata={title:'Curated News',description:'Topic-focused independent news aggregation'};
+import {SITE_URL} from '@/lib/seo';
+export const metadata:Metadata={metadataBase:new URL(SITE_URL),title:{default:'News Agg | Curated News',template:'%s'},description:'Independent, source-attributed news and AI-assisted summaries.',applicationName:'News Agg',openGraph:{type:'website',siteName:'News Agg',locale:'en_US'},twitter:{card:'summary'},robots:{index:true,follow:true}};
 export default function Layout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>}
