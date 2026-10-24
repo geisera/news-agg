@@ -25,3 +25,13 @@ Reusable, single-topic, independently deployed news aggregator. Built with Next.
 Never expose the service-role key to browsers. Admin endpoints check a verified Supabase access token and administrator allowlist; collection requires `CRON_SECRET`. Feed requests reject local/private addresses and restrict redirects. Harden with network egress controls (DNS rebinding protection), job locking, budgets, monitoring and security testing before production use.
 
 This is an MVP starter, not a production-complete publishing platform.
+## X post automation (optional)
+
+A new story cluster, rather than each article added to an existing cluster, is eligible for an automatic X post. This integration is **off by default** and does not backfill past stories. The X post includes the new story's headline and a link to `https://omarreport.com/` (not an internal story URL). The existing collection workflow processes at most one queued post after a run.
+
+1. Register a developer app at https://console.x.com/ with OAuth 2.0 User authentication and `tweet.write`, `tweet.read`, `users.read` scopes.
+2. Obtain a **user-context access token** authorized by the publishing X account. An app-only bearer token will not work for creating posts. Configure `X_USER_ACCESS_TOKEN` as a sensitive Production environment variable in Vercel, then redeploy. User-context OAuth tokens expire; the current implementation requires renewing this variable when the token expires. Do not paste tokens into the dashboard or commit them.
+3. Open Admin → **X automation**, choose a daily cap and enable automation. The default limit is 5 posts per UTC day.
+4. Posting results are visible under Publishing history. Failed or uncertain API responses are marked **review** instead of automatically retried, to avoid duplicate posts.
+
+The underlying Supabase tables and claim RPC are defined in `supabase/schema.sql`. X API usage may incur charges. Check the current platform pricing and API access before enabling the integration.
