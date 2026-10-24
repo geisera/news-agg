@@ -87,3 +87,22 @@ begin
 end $$;
 revoke all on function public.claim_x_post() from public,anon,authenticated;
 grant execute on function public.claim_x_post() to service_role;
+
+-- OAuth 2.0 user connection (encrypted using server-only X_TOKEN_ENCRYPTION_KEY).
+create table if not exists public.x_oauth_connection(
+ id integer primary key default 1 check(id=1),
+ access_cipher text not null,
+ refresh_cipher text not null,
+ expires_at timestamptz not null,
+ username text,
+ updated_at timestamptz not null default now()
+);
+create table if not exists public.x_oauth_states(
+ state_hash text primary key,
+ verifier_cipher text not null,
+ admin_id uuid not null,
+ expires_at timestamptz not null
+);
+alter table public.x_oauth_connection enable row level security;
+alter table public.x_oauth_states enable row level security;
+revoke all on public.x_oauth_connection,public.x_oauth_states from anon,authenticated;
