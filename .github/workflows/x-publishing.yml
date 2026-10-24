@@ -32,7 +32,7 @@ jobs:
               ;;
           esac
       - name: Publish next eligible article
-        if: steps.slot.outputs.due == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.slot.outputs.due == 'true'
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
