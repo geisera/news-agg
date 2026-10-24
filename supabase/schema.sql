@@ -106,3 +106,54 @@ create table if not exists public.x_oauth_states(
 alter table public.x_oauth_connection enable row level security;
 alter table public.x_oauth_states enable row level security;
 revoke all on public.x_oauth_connection,public.x_oauth_states from anon,authenticated;
+
+-- Independent article-level X queue and approximately hourly randomized cadence.
+create table if not exists public.x_article_posts(
+ article_id uuid primary key references public.articles(id) on delete cascade,
+ status text not null default 'pending' check(status in ('pending','sending','sent','failed','review')),
+ tweet_id text unique,attempts integer not null default 0,last_error text,
+ created_at timestamptz not null default now(),updated_at timestamptz not null default now()
+);
+create table if not exists public.x_schedule(
+ id integer primary key default 1 check(id=1),
+ next_due_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+insert into public.x_schedule(id) values(1) on conflict do nothing;
+alter table public.x_article_posts enable row level security;
+alter table public.x_schedule enable row level security;
+revoke all on public.x_article_posts,public.x_schedule from anon,authenticated;
+-- Preserve previous successful posts when migrating canonical story articles.
+insert into public.x_article_posts(article_id,status,tweet_id,attempts,last_error,created_at,updated_at)
+select s.canonical_article_id,p.status,p.tweet_id,p.attempts,p.last_error,p.created_at,p.updated_at
+from public.x_posts p join public.stories s on s.id=p.story_id
+join public.articles a on a.id=s.canonical_article_id
+where s.canonical_article_id is not null on conflict(article_id) do nothing;
+insert into public.x_article_posts(article_id,status)
+select id,'pending' from public.articles where status='published'
+on conflict(article_id) do nothing;
+create or replace function public.claim_due_x_article() returns uuid
+language plpgsql security definer set search_path=public as $$
+declare picked uuid;due timestamptz;cap integer;enabled_flag boolean;
+begin
+ select enabled,daily_limit into enabled_flag,cap from x_settings where id=1;
+ if not coalesce(enabled_flag,false) or cap=0 then return null;end if;
+ perform 1 from x_schedule where id=1 for update;
+ select next_due_at into due from x_schedule where id=1;
+ if due>now() then return null;end if;
+ if (select count(*) from x_article_posts where status in ('sent','sending')
+     and updated_at>=date_trunc('day',now()))>=cap then return null;end if;
+ select p.article_id into picked from x_article_posts p join articles a on a.id=p.article_id
+ where p.status='pending' and a.status='published'
+ order by a.published_at asc nulls last,p.created_at asc
+ for update of p skip locked limit 1;
+ if picked is not null then
+  update x_article_posts set status='sending',attempts=attempts+1,updated_at=now()
+  where article_id=picked;
+  update x_schedule set next_due_at=now()+(interval '50 minutes'+random()*interval '20 minutes'),
+   updated_at=now() where id=1;
+ end if;
+ return picked;
+end $$;
+revoke all on function public.claim_due_x_article() from public,anon,authenticated;
+grant execute on function public.claim_due_x_article() to service_role;
