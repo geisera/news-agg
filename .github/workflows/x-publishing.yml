@@ -1,10 +1,11 @@
 name: Publish queued X articles
 on:
   schedule:
-    - cron: '30 8,13,16,19 * * *'
-      timezone: 'America/New_York'
-    - cron: '0 11 * * *'
-      timezone: 'America/New_York'
+    # Run candidate slots in both EDT (UTC-4) and EST (UTC-5).
+    # The local-time guard ensures only the five Eastern slots publish.
+    - cron: '30 12,13,17,18,20,21,23 * * *'
+    - cron: '0 15,16 * * *'
+    - cron: '30 0 * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,7 +17,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Check due X post
+      - name: Check Eastern publishing slot
+        id: slot
+        shell: bash
+        run: |
+          local_time="$(TZ=America/New_York date +%H:%M)"
+          case "$local_time" in
+            08:30|11:00|13:30|16:00|19:30)
+              echo "due=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Skipping: $local_time Eastern is not a publishing slot."
+              echo "due=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+      - name: Publish next eligible article
+        if: steps.slot.outputs.due == 'true'
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
