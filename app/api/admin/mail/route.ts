@@ -27,10 +27,25 @@ export async function GET(req:NextRequest){
   return NextResponse.json(result,{headers:{'Cache-Control':'private, no-store'}});
  }catch(e){return fail(e)}
 }
+const compose=z.object({to:z.email().max(254),subject:z.string().trim().min(1).max(200).refine(v=>!/[\\r\\n]/.test(v)),text:z.string().trim().min(1).max(20000),idempotencyKey:uuid});
 const reply=z.object({threadId:uuid,emailId:uuid,text:z.string().trim().min(1).max(20000)});
 export async function POST(req:NextRequest){
  if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
- const v=reply.safeParse(await req.json().catch(()=>null));
+ const body=await req.json().catch(()=>null);
+ if(body?.mode==='compose'){
+  const parsed=compose.safeParse(body);
+  if(!parsed.success)return NextResponse.json({error:'Invalid recipient, subject, or message'},{status:400});
+  try{
+   const key=process.env.RESEND_API_KEY;
+   if(!key)throw Error('RESEND_API_KEY is not configured');
+   const sent=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':parsed.data.idempotencyKey},body:JSON.stringify({from:'Omar Report <contact@omarreport.com>',to:[parsed.data.to],subject:parsed.data.subject,text:parsed.data.text}),cache:'no-store',signal:AbortSignal.timeout(12000)});
+   const data=await sent.json().catch(()=>({}));
+   if(!sent.ok)throw Error('Resend returned '+sent.status+': '+(data.message||'Send failed'));
+   await auditAdmin(req,'email.compose');
+   return NextResponse.json({id:data.id},{headers:{'Cache-Control':'no-store'}});
+  }catch(e){return fail(e)}
+ }
+ const v=reply.safeParse(body);
  if(!v.success)return NextResponse.json({error:'Invalid reply'},{status:400});
  try{const {threadId,emailId,text}=v.data;const r=await resend('/threads/'+threadId+'/emails/'+emailId+'/reply',{method:'POST',body:JSON.stringify({text}),headers:{'Idempotency-Key':crypto.randomUUID()}});await auditAdmin(req,'email.reply');return NextResponse.json({id:r.id},{headers:{'Cache-Control':'no-store'}})}
  catch(e){return fail(e)}
