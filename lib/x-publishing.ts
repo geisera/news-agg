@@ -1,3 +1,4 @@
+import {currentXToken} from '@/lib/x-oauth';
 import {db} from '@/lib/db';
 export async function queueXStory(storyId:string){
  const client=db();
@@ -8,7 +9,8 @@ export async function queueXStory(storyId:string){
 }
 export async function publishQueuedXPost(){
  const client=db();
- if(!process.env.X_USER_ACCESS_TOKEN)return {status:'not_configured'};
+ const connection=await client.from('x_oauth_connection').select('id').eq('id',1).maybeSingle();
+ if(connection.error||!connection.data)return {status:'not_configured'};
  const claim=await client.rpc('claim_x_post');
  if(claim.error)throw claim.error;
  const storyId=claim.data as string|null;
@@ -21,7 +23,8 @@ export async function publishQueuedXPost(){
  const headline=String(story.data.headline).replace(/\s+/g,' ').trim();
  const text=headline.slice(0,230).trim()+'\n\nhttps://omarreport.com/';
  try{
-  const response=await fetch('https://api.x.com/2/tweets',{method:'POST',headers:{Authorization:'Bearer '+process.env.X_USER_ACCESS_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({text}),signal:AbortSignal.timeout(12000),cache:'no-store'});
+  const accessToken=await currentXToken();
+  const response=await fetch('https://api.x.com/2/tweets',{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({text}),signal:AbortSignal.timeout(12000),cache:'no-store'});
   const payload=await response.json().catch(()=>({}));
   if(!response.ok||!payload?.data?.id)throw Error('X API HTTP '+response.status+': '+JSON.stringify(payload).slice(0,300));
   const saved=await client.from('x_posts').update({status:'sent',tweet_id:String(payload.data.id),last_error:null,updated_at:new Date().toISOString()}).eq('story_id',storyId);
