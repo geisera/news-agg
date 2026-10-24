@@ -1,0 +1,24 @@
+name: Publish queued X articles
+on:
+  schedule:
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: x-publishing
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check due X post
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "Missing CRON_SECRET GitHub Actions secret"; exit 1; fi
+          curl --fail-with-body --silent --show-error --max-time 90 --retry 2 --retry-delay 3 \
+            -X POST https://omarreport.com/api/x/publish \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json"
