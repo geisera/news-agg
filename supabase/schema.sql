@@ -161,3 +161,68 @@ begin
 end $$;
 revoke all on function public.claim_due_x_article() from public,anon,authenticated;
 grant execute on function public.claim_due_x_article() to service_role;
+
+-- Ranked rolling X shortlist and Eastern calendar daily cap.
+CREATE OR REPLACE FUNCTION public.refresh_x_shortlist()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare n integer;
+begin
+ with ranked as (
+ select a.id,a.story_id,row_number() over (partition by coalesce(a.story_id::text,a.id::text) order by (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) desc,a.published_at desc nulls last) as story_rank,
+ (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) as score
+ from articles a
+ where a.status='published' and coalesce(a.published_at,a.created_at)>=now()-interval '7 days'
+ and not exists(select 1 from x_article_posts xp where xp.article_id=a.id and xp.status in ('sent','sending','review','failed'))
+ and not exists(select 1 from x_article_posts xp join articles old on old.id=xp.article_id where xp.status in ('sent','sending','review') and a.story_id is not null and old.story_id=a.story_id)
+ ), chosen as (
+ select id from ranked where story_rank=1 order by score desc,id limit 5
+ )
+ delete from x_article_posts p where p.status='pending' and not exists(select 1 from chosen where id=p.article_id);
+ with ranked as (
+ select a.id,a.story_id,row_number() over (partition by coalesce(a.story_id::text,a.id::text) order by (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) desc,a.published_at desc nulls last) as story_rank,
+ (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) as score
+ from articles a where a.status='published' and coalesce(a.published_at,a.created_at)>=now()-interval '7 days'
+ and not exists(select 1 from x_article_posts xp where xp.article_id=a.id and xp.status in ('sent','sending','review','failed'))
+ and not exists(select 1 from x_article_posts xp join articles old on old.id=xp.article_id where xp.status in ('sent','sending','review') and a.story_id is not null and old.story_id=a.story_id)
+ ),chosen as (select id from ranked where story_rank=1 order by score desc,id limit 5)
+ insert into x_article_posts(article_id,status) select id,'pending' from chosen on conflict(article_id) do nothing;
+ select count(*) into n from x_article_posts where status='pending';
+ return n;
+end $function$
+;
+CREATE OR REPLACE FUNCTION public.claim_due_x_article()
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare picked uuid;due timestamptz;cap integer;enabled_flag boolean;day_start timestamptz;day_end timestamptz;
+begin
+ select enabled,least(daily_limit,5) into enabled_flag,cap from x_settings where id=1;
+ if not coalesce(enabled_flag,false) or cap=0 then return null;end if;
+ perform 1 from x_schedule where id=1 for update;
+ select next_due_at into due from x_schedule where id=1;
+ if due>now() then return null;end if;
+ day_start := date_trunc('day',now() at time zone 'America/New_York') at time zone 'America/New_York';
+ day_end := (date_trunc('day',now() at time zone 'America/New_York')+interval '1 day') at time zone 'America/New_York';
+ if (select count(*) from x_article_posts where status in ('sent','sending','review') and updated_at>=day_start and updated_at<day_end)>=cap then return null;end if;
+ perform public.refresh_x_shortlist();
+ select p.article_id into picked from x_article_posts p join articles a on a.id=p.article_id where p.status='pending' and a.status='published'
+ order by (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) desc,p.created_at asc
+ for update of p skip locked limit 1;
+ if picked is not null then
+ update x_article_posts set status='sending',attempts=attempts+1,updated_at=now() where article_id=picked;
+ update x_schedule set next_due_at=now()+(interval '50 minutes'+random()*interval '20 minutes'),updated_at=now() where id=1;
+ end if;
+ return picked;
+end $function$
+;
+revoke all on function public.refresh_x_shortlist() from public,anon,authenticated;
+grant execute on function public.refresh_x_shortlist() to service_role;
+revoke all on function public.claim_due_x_article() from public,anon,authenticated;
+grant execute on function public.claim_due_x_article() to service_role;
+update public.x_settings set daily_limit=least(daily_limit,5) where id=1;
