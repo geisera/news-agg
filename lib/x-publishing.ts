@@ -1,7 +1,7 @@
 import {currentXToken} from '@/lib/x-oauth';
 import {db} from '@/lib/db';
-export async function queueXArticle(articleId:string){
- const result=await db().from('x_article_posts').upsert({article_id:articleId,status:'pending'},{onConflict:'article_id',ignoreDuplicates:true});
+export async function queueXArticle(_articleId:string){
+ const result=await db().rpc('refresh_x_shortlist');
  if(result.error)throw result.error;
 }
 export async function publishDueXArticle(){
