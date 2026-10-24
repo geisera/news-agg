@@ -5,7 +5,7 @@ const url=process.env.NEXT_PUBLIC_SUPABASE_URL||'',key=process.env.NEXT_PUBLIC_S
 type Site={name:string;topic_description:string;include_rules:string;exclude_rules:string;relevance_threshold:number;search_queries:string;search_freshness:'pd'|'pw'|'pm'|'py';search_result_limit:number};
 export default function Admin(){
  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[token,setToken]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
- const [site,setSite]=useState<Site>({name:'Curated News',topic_description:'',include_rules:'',exclude_rules:'',relevance_threshold:70,search_queries:'',search_freshness:'pw',search_result_limit:20});
+ const [site,setSite]=useState<Site>({name:'Omar Report',topic_description:'',include_rules:'',exclude_rules:'',relevance_threshold:70,search_queries:'',search_freshness:'pw',search_result_limit:20});
  const [purgeConfirm,setPurgeConfirm]=useState(''),[purgeCounts,setPurgeCounts]=useState<{articles:number;stories:number;collectionRuns:number}|null>(null);
  const [images,setImages]=useState<{id:string;title:string;image_url:string;image_allowed:boolean;source_name:string|null}[]>([]);
  const client=url&&key?createClient(url,key):null;

@@ -1,4 +1,4 @@
-# News Agg
+# Omar Report
 
 Reusable, single-topic, independently deployed news aggregator. Built with Next.js, Supabase, RSS/Atom collection, and optional OpenAI classification.
 
