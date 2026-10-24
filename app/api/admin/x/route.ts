@@ -15,7 +15,7 @@ export async function PUT(req:NextRequest){
  if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
  const body=schema.safeParse(await req.json().catch(()=>null));
  if(!body.success)return NextResponse.json({error:'Invalid settings'},{status:400});
- if(body.data.enabled&&!(await db().from('x_oauth_connection').select('id').eq('id',1).maybeSingle()).datareturn NextResponse.json({error:'Configure X_USER_ACCESS_TOKEN in Vercel before enabling.'},{status:400});
+ if(body.data.enabled&&!(await db().from('x_oauth_connection').select('id').eq('id',1).maybeSingle()).data)return NextResponse.json({error:'Connect an X account before enabling posting.'},{status:400});
  const result=await db().from('x_settings').update({...body.data,updated_at:new Date().toISOString()}).eq('id',1);
  if(result.error)return NextResponse.json({error:result.error.message},{status:500});
  await auditAdmin(req,'x.settings.update');
