@@ -1,3 +1,4 @@
+import {queueXArticle} from '@/lib/x-publishing';
 import {db} from '@/lib/db';
 import {evaluate} from '@/lib/curate';
 import {decodeHtmlEntities} from '@/lib/fetch';
@@ -45,7 +46,7 @@ export async function runCollection(){
    }else{
     const saved=await client.from('articles').update({summary:score.summary,relevance:score.relevance,significance:score.significance,top_score:calculateTop(score,article.published_at),evaluation_reason:score.reason||'Evaluated',status:'published'}).eq('id',article.id);
     if(saved.error)throw saved.error;
-    published++;await group(article.id,article.title,article.published_at,article.description);
+    published++;await group(article.id,article.title,article.published_at,article.description);await queueXArticle(article.id);
    }
    evaluated++;
   }catch(e){errors.push('Evaluation: '+String(e));break}
@@ -89,7 +90,7 @@ export async function runCollection(){
       const row={url,title,description,published_at:date,source_name:(item.profile?.name||link.hostname.replace(/^www\./,'')).slice(0,200),source_id:null,status:'published',summary:score.summary,relevance:score.relevance,significance:score.significance,top_score:calculateTop(score,date),evaluation_reason:score.reason||'Evaluated',image_url,image_allowed:false,search_discovered:true};
       const inserted=await client.from('articles').insert(row).select('id').single();
       if(inserted.error){if(inserted.error.code!=='23505')throw inserted.error;continue}
-      published++;await group(inserted.data.id,title,date,description);
+      published++;await group(inserted.data.id,title,date,description);await queueXArticle(inserted.data.id);
      }catch(e){errors.push('Candidate: '+String(e));if(String(e).includes('AI HTTP')){stop=true;break}}
     }
    }catch(e){errors.push('Search: '+String(e))}
