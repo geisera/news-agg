@@ -1,9 +1,9 @@
 name: Publish queued X articles
 on:
   schedule:
-    - cron: '0,15,30,45 8-21 * * *'
+    - cron: '30 8,13,16,19 * * *'
       timezone: 'America/New_York'
-    - cron: '0 22 * * *'
+    - cron: '0 11 * * *'
       timezone: 'America/New_York'
   workflow_dispatch:
 permissions:
