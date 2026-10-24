@@ -58,3 +58,32 @@ revoke all on public.admin_request_limits from anon,authenticated;
 create or replace function public.admin_rate_allowed(p_actor uuid) returns boolean language plpgsql security invoker set search_path='' as $$ declare n integer; begin insert into public.admin_request_limits(actor,window_start,requests) values(p_actor,now(),1) on conflict (actor) do update set window_start=case when public.admin_request_limits.window_start<now()-interval '1 minute' then now() else public.admin_request_limits.window_start end,requests=case when public.admin_request_limits.window_start<now()-interval '1 minute' then 1 else public.admin_request_limits.requests+1 end returning requests into n;return n<=60;end $$;
 revoke all on function public.admin_rate_allowed(uuid) from public,anon,authenticated;
 grant execute on function public.admin_rate_allowed(uuid) to service_role;
+
+-- X publication queue (service-role only; disabled by default).
+create table if not exists public.x_settings (
+ id integer primary key default 1 check(id=1),
+ enabled boolean not null default false,
+ daily_limit integer not null default 5 check(daily_limit between 0 and 50),
+ updated_at timestamptz not null default now()
+);
+insert into public.x_settings(id,enabled,daily_limit) values(1,false,5) on conflict(id) do nothing;
+create table if not exists public.x_posts (
+ story_id uuid primary key references public.stories(id) on delete cascade,
+ status text not null default 'pending' check(status in ('pending','sending','sent','failed','review')),
+ tweet_id text unique,attempts integer not null default 0,
+ last_error text,created_at timestamptz not null default now(),updated_at timestamptz not null default now()
+);
+alter table public.x_settings enable row level security;
+alter table public.x_posts enable row level security;
+revoke all on public.x_settings,public.x_posts from anon,authenticated;
+create or replace function public.claim_x_post() returns uuid language plpgsql security definer set search_path=public as $$
+declare picked uuid;
+begin
+ if not exists(select 1 from x_settings where id=1 and enabled) then return null;end if;
+ if (select count(*) from x_posts where status in ('sent','sending') and updated_at>=date_trunc('day',now())) >= (select daily_limit from x_settings where id=1) then return null;end if;
+ select story_id into picked from x_posts where status='pending' order by created_at for update skip locked limit 1;
+ if picked is not null then update x_posts set status='sending',attempts=attempts+1,updated_at=now() where story_id=picked;end if;
+ return picked;
+end $$;
+revoke all on function public.claim_x_post() from public,anon,authenticated;
+grant execute on function public.claim_x_post() to service_role;
