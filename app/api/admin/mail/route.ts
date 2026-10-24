@@ -35,3 +35,15 @@ export async function POST(req:NextRequest){
  try{const {threadId,emailId,text}=v.data;const r=await resend('/threads/'+threadId+'/emails/'+emailId+'/reply',{method:'POST',body:JSON.stringify({text}),headers:{'Idempotency-Key':crypto.randomUUID()}});await auditAdmin(req,'email.reply');return NextResponse.json({id:r.id},{headers:{'Cache-Control':'no-store'}})}
  catch(e){return fail(e)}
 }
+
+export async function DELETE(req:NextRequest){
+ if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
+ const body=await req.json().catch(()=>null);
+ const parsed=z.object({threadId:uuid,confirmation:z.literal('DELETE')}).safeParse(body);
+ if(!parsed.success)return NextResponse.json({error:'Thread ID and deletion confirmation required'},{status:400});
+ try{
+  await resend('/threads/'+parsed.data.threadId,{method:'DELETE'});
+  await auditAdmin(req,'email.thread.delete');
+  return NextResponse.json({ok:true},{headers:{'Cache-Control':'no-store'}});
+ }catch(e){return fail(e)}
+}
