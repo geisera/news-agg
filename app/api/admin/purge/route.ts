@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from 'next/server';
-import {isAdmin} from '@/lib/auth';
+import {isAdmin,auditAdmin} from '@/lib/auth';
 import {db} from '@/lib/db';
 export const runtime='nodejs';
 export async function GET(req:NextRequest){
@@ -19,5 +19,5 @@ export async function POST(req:NextRequest){
  if(body?.confirmation!=='PURGE')return NextResponse.json({error:'Type PURGE to confirm permanent deletion'},{status:400});
  const {data,error}=await db().rpc('purge_news_content');
  if(error)return NextResponse.json({error:'Purge failed',details:error.message},{status:500});
- return NextResponse.json(data);
+ await auditAdmin(req,'content.purge');return NextResponse.json(data);
 }

@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from 'next/server';
-import {isAdmin} from '@/lib/auth';
+import {isAdmin,auditAdmin} from '@/lib/auth';
 import {db} from '@/lib/db';
 import {safeUrl,fetchSafe,itemsFromFeed} from '@/lib/fetch';
 import {z} from 'zod';
@@ -29,5 +29,5 @@ export async function POST(req:NextRequest){
    results.push({url:raw,status:'added'});
   }catch(e){results.push({url:raw,status:'invalid',detail:String(e).slice(0,200)})}
  }
- return NextResponse.json({results,added:results.filter(r=>r.status==='added').length,duplicates:results.filter(r=>r.status==='duplicate').length,failed:results.filter(r=>r.status==='invalid').length});
+ if(results.some(r=>r.status==='added'))await auditAdmin(req,'sources.bulk_add');return NextResponse.json({results,added:results.filter(r=>r.status==='added').length,duplicates:results.filter(r=>r.status==='duplicate').length,failed:results.filter(r=>r.status==='invalid').length});
 }

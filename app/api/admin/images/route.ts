@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from 'next/server';
-import {isAdmin} from '@/lib/auth';
+import {isAdmin,auditAdmin} from '@/lib/auth';
 import {db} from '@/lib/db';
 import {z} from 'zod';
 const change=z.object({id:z.string().uuid(),approved:z.boolean()});
@@ -12,5 +12,5 @@ export async function PATCH(req:NextRequest){
  if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
  const parsed=change.safeParse(await req.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:'Invalid approval request'},{status:400});
  const r=await db().from('articles').update({image_allowed:parsed.data.approved}).eq('id',parsed.data.id).not('image_url','is',null);
- return r.error?NextResponse.json({error:r.error.message},{status:500}):NextResponse.json({ok:true});
+ if(!r.error)await auditAdmin(req,'images.update');return r.error?NextResponse.json({error:r.error.message},{status:500}):NextResponse.json({ok:true});
 }

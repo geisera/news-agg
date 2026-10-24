@@ -46,3 +46,15 @@ begin
 end; $$;
 revoke all on function public.purge_news_content() from public,anon,authenticated;
 grant execute on function public.purge_news_content() to service_role;
+
+-- Admin request limiting and action audit (service-role only).
+create table if not exists public.admin_audit_log(id bigint generated always as identity primary key,actor uuid not null,action text not null,created_at timestamptz not null default now());
+alter table public.admin_audit_log enable row level security;
+revoke all on public.admin_audit_log from anon,authenticated;
+create index if not exists admin_audit_log_actor_created_idx on public.admin_audit_log(actor,created_at desc);
+create table if not exists public.admin_request_limits(actor uuid primary key,window_start timestamptz not null default now(),requests integer not null default 0);
+alter table public.admin_request_limits enable row level security;
+revoke all on public.admin_request_limits from anon,authenticated;
+create or replace function public.admin_rate_allowed(p_actor uuid) returns boolean language plpgsql security invoker set search_path='' as $$ declare n integer; begin insert into public.admin_request_limits(actor,window_start,requests) values(p_actor,now(),1) on conflict (actor) do update set window_start=case when public.admin_request_limits.window_start<now()-interval '1 minute' then now() else public.admin_request_limits.window_start end,requests=case when public.admin_request_limits.window_start<now()-interval '1 minute' then 1 else public.admin_request_limits.requests+1 end returning requests into n;return n<=60;end $$;
+revoke all on function public.admin_rate_allowed(uuid) from public,anon,authenticated;
+grant execute on function public.admin_rate_allowed(uuid) to service_role;
