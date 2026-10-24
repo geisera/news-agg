@@ -226,3 +226,30 @@ grant execute on function public.refresh_x_shortlist() to service_role;
 revoke all on function public.claim_due_x_article() from public,anon,authenticated;
 grant execute on function public.claim_due_x_article() to service_role;
 update public.x_settings set daily_limit=least(daily_limit,5) where id=1;
+
+-- Fixed five daily GitHub Actions slots. No randomized next_due_at gate.
+CREATE OR REPLACE FUNCTION public.claim_due_x_article()
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare picked uuid;cap integer;enabled_flag boolean;day_start timestamptz;day_end timestamptz;
+begin
+ select enabled,least(daily_limit,5) into enabled_flag,cap from x_settings where id=1;
+ if not coalesce(enabled_flag,false) or cap=0 then return null;end if;
+ day_start := date_trunc('day',now() at time zone 'America/New_York') at time zone 'America/New_York';
+ day_end := (date_trunc('day',now() at time zone 'America/New_York')+interval '1 day') at time zone 'America/New_York';
+ if (select count(*) from x_article_posts where status in ('sent','sending','review') and updated_at>=day_start and updated_at<day_end)>=cap then return null;end if;
+ perform public.refresh_x_shortlist();
+ select p.article_id into picked from x_article_posts p join articles a on a.id=p.article_id where p.status='pending' and a.status='published'
+ order by (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) desc,p.created_at asc
+ for update of p skip locked limit 1;
+ if picked is not null then
+ update x_article_posts set status='sending',attempts=attempts+1,updated_at=now() where article_id=picked;
+ end if;
+ return picked;
+end $function$
+;
+revoke all on function public.claim_due_x_article() from public,anon,authenticated;
+grant execute on function public.claim_due_x_article() to service_role;
