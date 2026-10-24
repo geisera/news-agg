@@ -27,14 +27,14 @@ export async function GET(req:NextRequest){
   return NextResponse.json(result,{headers:{'Cache-Control':'private, no-store'}});
  }catch(e){return fail(e)}
 }
-const compose=z.object({to:z.email().max(254),subject:z.string().trim().min(1).max(200).refine(v=>!/[\\r\\n]/.test(v)),text:z.string().trim().min(1).max(20000),idempotencyKey:uuid});
+const compose=z.object({to:z.email().max(254),subject:z.string().trim().min(1).max(200).refine(v=>!/[\r\n]/.test(v)),text:z.string().trim().min(1).max(20000),idempotencyKey:uuid});
 const reply=z.object({threadId:uuid,emailId:uuid,text:z.string().trim().min(1).max(20000)});
 export async function POST(req:NextRequest){
  if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
  const body=await req.json().catch(()=>null);
  if(body?.mode==='compose'){
   const parsed=compose.safeParse(body);
-  if(!parsed.success)return NextResponse.json({error:'Invalid recipient, subject, or message'},{status:400});
+  if(!parsed.success)return NextResponse.json({error:'Invalid compose fields',details:parsed.error.issues.map(issue=>issue.path.join('.')+': '+issue.message).join('; ')},{status:400});
   try{
    const key=process.env.RESEND_API_KEY;
    if(!key)throw Error('RESEND_API_KEY is not configured');
