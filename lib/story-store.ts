@@ -1,5 +1,4 @@
 import {sameStory,tokens} from '@/lib/stories';
-import {queueXStory} from '@/lib/x-publishing';
 type Client=ReturnType<typeof import('./db').db>;
 function slug(title:string,id:string){return (title.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,72)||'story')+'-'+id.slice(0,8)}
 function similarity(a:string,b:string){const x=tokens(a),y=tokens(b);const shared=[...x].filter(t=>y.has(t)).length;return shared/Math.max(1,Math.min(x.size,y.size))}
@@ -23,7 +22,7 @@ export async function assignStory(client:Client,article:{id:string;title:string;
  }
  const updated=await client.from('articles').update({story_id:id}).eq('id',article.id);if(updated.error)throw updated.error;
  if(match)await client.from('stories').update({last_updated_at:new Date().toISOString()}).eq('id',id);
- else await queueXStory(id);
+
  return id;
 }
 export async function reconcileStories(client:Client,limit=100){
