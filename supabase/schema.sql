@@ -35,15 +35,19 @@ create index if not exists stories_updated_idx on public.stories(last_updated_at
 -- Atomic reset of news content. Invocation restricted to service_role; admin auth checked in API.
 create or replace function public.purge_news_content()
 returns jsonb language plpgsql security invoker set search_path = ''
-as $$
-declare article_count bigint; story_count bigint; run_count bigint;
+as $
+declare article_count bigint; story_count bigint; run_count bigint; x_queue_count bigint;
 begin
  select count(*) into article_count from public.articles;
  select count(*) into story_count from public.stories;
  select count(*) into run_count from public.collection_runs;
- truncate table public.articles,public.stories,public.collection_runs;
- return jsonb_build_object('articles',article_count,'stories',story_count,'collectionRuns',run_count);
-end; $$;
+ select count(*) into x_queue_count from public.x_article_posts;
+ -- Include both queue generations to satisfy foreign keys when truncating articles/stories.
+ truncate table public.x_article_posts,public.x_posts,public.articles,public.stories,public.collection_runs;
+ -- Preserve OAuth and settings; make the first new article immediately eligible.
+ update public.x_schedule set next_due_at=now(),updated_at=now() where id=1;
+ return jsonb_build_object('articles',article_count,'stories',story_count,'collectionRuns',run_count,'xQueuedArticles',x_queue_count);
+end; $;
 revoke all on function public.purge_news_content() from public,anon,authenticated;
 grant execute on function public.purge_news_content() to service_role;
 
