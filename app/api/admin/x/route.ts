@@ -6,7 +6,7 @@ export const dynamic='force-dynamic';
 export async function GET(req:NextRequest){
  if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
  const client=db();
- const [settings,posts,connection]=await Promise.all([client.from('x_settings').select('enabled,daily_limit').eq('id',1).single(),client.from('x_posts').select('story_id,status,tweet_id,attempts,last_error,created_at,updated_at').order('created_at',{ascending:false}).limit(50),client.from('x_oauth_connection').select('username,expires_at').eq('id',1).maybeSingle()]);
+ const [settings,posts,connection]=await Promise.all([client.from('x_settings').select('enabled,daily_limit').eq('id',1).single(),client.from('x_article_posts').select('article_id,status,tweet_id,attempts,last_error,created_at,updated_at').order('created_at',{ascending:false}).limit(50),client.from('x_oauth_connection').select('username,expires_at').eq('id',1).maybeSingle()]);
  if(settings.error||posts.error)return NextResponse.json({error:settings.error?.message||posts.error?.message},{status:500});
  return NextResponse.json({settings:settings.data,posts:posts.data,configured:Boolean(connection.data),username:connection.data?.username||null},{headers:{'Cache-Control':'no-store'}});
 }
