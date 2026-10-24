@@ -10,7 +10,7 @@ export async function GET(req:NextRequest){
  if(settings.error||posts.error)return NextResponse.json({error:settings.error?.message||posts.error?.message},{status:500});
  return NextResponse.json({settings:settings.data,posts:posts.data,configured:Boolean(connection.data),username:connection.data?.username||null},{headers:{'Cache-Control':'no-store'}});
 }
-const schema=z.object({enabled:z.boolean(),daily_limit:z.number().int().min(0).max(50)});
+const schema=z.object({enabled:z.boolean(),daily_limit:z.number().int().min(0).max(5)});
 export async function PUT(req:NextRequest){
  if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
  const body=schema.safeParse(await req.json().catch(()=>null));
