@@ -1,5 +1,5 @@
 create extension if not exists pgcrypto;
-create table if not exists site_settings (id integer primary key default 1 check (id=1),name text not null default 'Curated News',topic_description text not null default '',include_rules text not null default '',exclude_rules text not null default '',relevance_threshold integer not null default 70 check(relevance_threshold between 0 and 100));
+create table if not exists site_settings (id integer primary key default 1 check (id=1),name text not null default 'Omar Report',topic_description text not null default '',include_rules text not null default '',exclude_rules text not null default '',relevance_threshold integer not null default 70 check(relevance_threshold between 0 and 100));
 insert into site_settings(id) values (1) on conflict do nothing;
 create table if not exists administrators(user_id uuid primary key references auth.users(id) on delete cascade);
 create table if not exists sources(id uuid primary key default gen_random_uuid(),name text not null,feed_url text not null unique,site_url text,enabled boolean not null default true,image_license_ok boolean not null default false,last_checked_at timestamptz,last_error text,created_at timestamptz not null default now());

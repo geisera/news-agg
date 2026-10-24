@@ -15,6 +15,8 @@ export async function GET(req:NextRequest){
 }
 export async function POST(req:NextRequest){
  if(!await isAdmin(req))return NextResponse.json({error:'Unauthorized'},{status:401});
+ const bearer=req.headers.get('authorization')?.match(/^Bearer (.+)$/i)?.[1]||'';
+ try{const payload=JSON.parse(Buffer.from(bearer.split('.')[1],'base64url').toString('utf8'));if(!payload.auth_time||Date.now()/1000-payload.auth_time>900)return NextResponse.json({error:'Reauthentication required before purge'},{status:403});}catch{return NextResponse.json({error:'Invalid session'},{status:403})}
  const body=await req.json().catch(()=>null);
  if(body?.confirmation!=='PURGE')return NextResponse.json({error:'Type PURGE to confirm permanent deletion'},{status:400});
  const {data,error}=await db().rpc('purge_news_content');
