@@ -27,7 +27,7 @@ Never expose the service-role key to browsers. Admin endpoints check a verified 
 This is an MVP starter, not a production-complete publishing platform.
 ## X post automation (OAuth 2.0)
 
-The X publisher posts **new story clusters only** and is disabled until explicitly enabled in the admin dashboard. Existing story clusters are not backfilled. Posts link to `https://omarreport.com/`.
+The X publisher posts **new story clusters only** and is disabled until explicitly enabled in the admin dashboard. Existing story clusters are not backfilled. Each post uses an AI-generated snarky commentary based on the canonical article's headline, description, and saved summary, followed by a direct link to the original publisher. It does not scrape or ingest the publisher's full article body.
 
 Setup:
 1. In the X Developer Console, configure a **Web App / Automated App** with Read and Write permissions and OAuth 2.0 user authentication. Register the **exact** callback `https://omarreport.com/api/auth/x/callback` and website `https://omarreport.com`.
