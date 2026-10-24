@@ -46,3 +46,6 @@ a.btn:any-link:hover{color:#fff;opacity:.85}
 
 /* Mailbox no longer has a folder sidebar. */
 .mail-layout{grid-template-columns:minmax(0,1fr)}
+
+/* Admin notifications remain visible regardless of page scroll. */
+.admin-toast{position:fixed;top:18px;right:18px;z-index:1000;width:min(440px,calc(100vw - 36px));display:flex;align-items:flex-start;gap:14px;padding:14px 15px;background:#fff;color:#273449;border:1px solid #cbd5e1;border-left:4px solid #3667a5;border-radius:8px;box-shadow:0 8px 30px rgba(15,23,42,.15);font:14px/1.5 Arial,sans-serif;overflow-wrap:anywhere}.admin-toast span{flex:1}.admin-toast button{flex:none;background:transparent;color:#526176;padding:0 4px;font-size:22px;line-height:1.1;border:0}.admin-toast button:hover{color:#172b4d}@media(max-width:600px){.admin-toast{top:10px;right:10px;width:calc(100vw - 20px)}}
