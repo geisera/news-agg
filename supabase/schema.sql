@@ -253,3 +253,25 @@ end $function$
 ;
 revoke all on function public.claim_due_x_article() from public,anon,authenticated;
 grant execute on function public.claim_due_x_article() to service_role;
+
+-- Admin-only manual article claim; bypasses daily cap and schedule, preserves duplicate protection.
+CREATE OR REPLACE FUNCTION public.claim_manual_x_article(p_article_id uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare existing text;
+begin
+ if not exists(select 1 from articles where id=p_article_id and status='published') then raise exception 'Article is not published';end if;
+ perform pg_advisory_xact_lock(hashtextextended(p_article_id::text,0));
+ select status into existing from x_article_posts where article_id=p_article_id for update;
+ if existing in ('sent','sending','review') then raise exception 'Article already sent, being sent, or awaiting review';end if;
+ insert into x_article_posts(article_id,status,attempts,updated_at,last_error)
+ values(p_article_id,'sending',1,now(),null)
+ on conflict(article_id) do update set status='sending',attempts=x_article_posts.attempts+1,updated_at=now(),last_error=null;
+ return p_article_id;
+end $function$
+;
+revoke all on function public.claim_manual_x_article(uuid) from public,anon,authenticated;
+grant execute on function public.claim_manual_x_article(uuid) to service_role;
