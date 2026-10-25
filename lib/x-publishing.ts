@@ -4,11 +4,11 @@ export async function queueXArticle(_articleId:string){
  const result=await db().rpc('refresh_x_shortlist');
  if(result.error)throw result.error;
 }
-export async function publishDueXArticle(){
+export async function publishDueXArticle(manualArticleId?:string){
  const client=db();
  const connection=await client.from('x_oauth_connection').select('id').eq('id',1).maybeSingle();
  if(connection.error||!connection.data)return {status:'not_configured'};
- const claim=await client.rpc('claim_due_x_article');
+ const claim=manualArticleId?await client.rpc('claim_manual_x_article',{p_article_id:manualArticleId}):await client.rpc('claim_due_x_article');
  if(claim.error)throw claim.error;
  const articleId=claim.data as string|null;
  if(!articleId)return {status:'idle'};
