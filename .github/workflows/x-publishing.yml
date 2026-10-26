@@ -1,9 +1,16 @@
 name: Publish queued X articles
 on:
   schedule:
-    # Poll every 15 minutes in UTC. Supabase determines which Eastern
-    # publishing slots are due and remembers those already claimed.
-    - cron: '0,15,30,45 * * * *'
+    # Five daily Eastern publishing opportunities. UTC offsets switch by season.
+    # March and November include both UTC offsets to cover DST transitions.
+    - cron: '30 12,17,23 * 4-10 *'
+    - cron: '0 15,20 * 4-10 *'
+    - cron: '30 13,18 * 12,1,2 *'
+    - cron: '0 16,21 * 12,1,2 *'
+    - cron: '30 0 * 12,1,2 *'
+    - cron: '30 12,13,17,18,23 * 3,11 *'
+    - cron: '0 15,16,20,21 * 3,11 *'
+    - cron: '30 0 * 3,11 *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,7 +22,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Publish next due X article
+      - name: Check seasonal UTC offset
+        id: offset
+        shell: bash
+        env:
+          CRON_EXPRESSION: ${{ github.event.schedule }}
+        run: |
+          due=true
+          if [[ "$CRON_EXPRESSION" == *"3,11"* ]]; then
+            current_offset="$(TZ=America/New_York date +%z)"
+            # In transition months, skip the other season's UTC schedule.
+            if [[ "$current_offset" == "-0400" ]]; then
+              case "$CRON_EXPRESSION" in
+                "30 12,13,17,18,23 * 3,11 *")
+                  utc_hour="$(date -u +%H)"
+                  [[ "$utc_hour" == 12 || "$utc_hour" == 17 || "$utc_hour" == 23 ]] || due=false ;;
+                "0 15,16,20,21 * 3,11 *")
+                  utc_hour="$(date -u +%H)"
+                  [[ "$utc_hour" == 15 || "$utc_hour" == 20 ]] || due=false ;;
+                *) due=false ;;
+              esac
+            else
+              case "$CRON_EXPRESSION" in
+                "30 12,13,17,18,23 * 3,11 *")
+                  utc_hour="$(date -u +%H)"
+                  [[ "$utc_hour" == 13 || "$utc_hour" == 18 ]] || due=false ;;
+                "0 15,16,20,21 * 3,11 *")
+                  utc_hour="$(date -u +%H)"
+                  [[ "$utc_hour" == 16 || "$utc_hour" == 21 ]] || due=false ;;
+                "30 0 * 3,11 *") due=true ;;
+                *) due=false ;;
+              esac
+            fi
+          fi
+          echo "due=$due" >> "$GITHUB_OUTPUT"
+      - name: Publish next eligible X article
+        if: github.event_name == 'workflow_dispatch' || steps.offset.outputs.due == 'true'
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
