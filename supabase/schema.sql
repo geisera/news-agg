@@ -275,3 +275,48 @@ end $function$
 ;
 revoke all on function public.claim_manual_x_article(uuid) from public,anon,authenticated;
 grant execute on function public.claim_manual_x_article(uuid) to service_role;
+
+-- Reliable five-slot Eastern publishing ledger. Missed slots can be claimed later the same day.
+create table if not exists public.x_publish_slots (
+ eastern_date date not null,
+ slot_number integer not null check(slot_number between 1 and 5),
+ article_id uuid references public.articles(id) on delete set null,
+ claimed_at timestamptz not null default now(),
+ primary key(eastern_date,slot_number)
+);
+alter table public.x_publish_slots enable row level security;
+revoke all on public.x_publish_slots from anon,authenticated;
+grant select,insert,update on public.x_publish_slots to service_role;
+CREATE OR REPLACE FUNCTION public.claim_due_x_article()
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare picked uuid;cap integer;enabled_flag boolean;local_day date;local_minute integer;due_slots integer;next_slot integer;
+begin
+ select enabled,least(daily_limit,5) into enabled_flag,cap from x_settings where id=1;
+ if not coalesce(enabled_flag,false) or cap is null or cap<1 then return null;end if;
+ -- Serialize scheduled claims, including concurrent GitHub checks.
+ perform pg_advisory_xact_lock(920261025);
+ local_day:=(now() at time zone 'America/New_York')::date;
+ local_minute:=extract(hour from now() at time zone 'America/New_York')::integer*60+extract(minute from now() at time zone 'America/New_York')::integer;
+ due_slots:=case when local_minute>=1170 then 5 when local_minute>=960 then 4 when local_minute>=810 then 3 when local_minute>=660 then 2 when local_minute>=510 then 1 else 0 end;
+ if due_slots=0 then return null;end if;
+ if (select count(*) from x_publish_slots where eastern_date=local_day)>=cap then return null;end if;
+ select s.slot_number into next_slot from generate_series(1,least(due_slots,cap)) s(slot_number)
+ where not exists(select 1 from x_publish_slots done where done.eastern_date=local_day and done.slot_number=s.slot_number)
+ order by s.slot_number limit 1;
+ if next_slot is null then return null;end if;
+ perform public.refresh_x_shortlist();
+ select p.article_id into picked from x_article_posts p join articles a on a.id=p.article_id where p.status='pending' and a.status='published'
+ order by (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) desc,p.created_at asc
+ for update of p skip locked limit 1;
+ if picked is null then return null;end if;
+ insert into x_publish_slots(eastern_date,slot_number,article_id) values(local_day,next_slot,picked);
+ update x_article_posts set status='sending',attempts=attempts+1,updated_at=now() where article_id=picked;
+ return picked;
+end $function$
+;
+revoke all on function public.claim_due_x_article() from public,anon,authenticated;
+grant execute on function public.claim_due_x_article() to service_role;
