@@ -320,3 +320,31 @@ end $function$
 ;
 revoke all on function public.claim_due_x_article() from public,anon,authenticated;
 grant execute on function public.claim_due_x_article() to service_role;
+
+-- Every scheduled action attempts exactly one available queued article (daily cap retained).
+CREATE OR REPLACE FUNCTION public.claim_due_x_article()
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare picked uuid;cap integer;enabled_flag boolean;local_day date;used integer;
+begin
+ select enabled,least(daily_limit,5) into enabled_flag,cap from x_settings where id=1;
+ if not coalesce(enabled_flag,false) or cap is null or cap<1 then return null;end if;
+ perform pg_advisory_xact_lock(920261025);
+ local_day:=(now() at time zone 'America/New_York')::date;
+ select count(*) into used from x_publish_slots where eastern_date=local_day;
+ if used>=cap then return null;end if;
+ perform public.refresh_x_shortlist();
+ select p.article_id into picked from x_article_posts p join articles a on a.id=p.article_id where p.status='pending' and a.status='published'
+ order by (coalesce(a.significance,0)*0.35+coalesce(a.relevance,0)*0.25+greatest(0,100-extract(epoch from (now()-coalesce(a.published_at,a.created_at)))/86400*10)*0.20+coalesce(a.top_score,0)*0.20) desc,p.created_at asc
+ for update of p skip locked limit 1;
+ if picked is null then return null;end if;
+ insert into x_publish_slots(eastern_date,slot_number,article_id) values(local_day,used+1,picked);
+ update x_article_posts set status='sending',attempts=attempts+1,updated_at=now() where article_id=picked;
+ return picked;
+end $function$
+;
+revoke all on function public.claim_due_x_article() from public,anon,authenticated;
+grant execute on function public.claim_due_x_article() to service_role;
