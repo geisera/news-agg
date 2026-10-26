@@ -1,16 +1,12 @@
 name: Publish queued X articles
 on:
   schedule:
-    # Five daily Eastern publishing opportunities. UTC offsets switch by season.
-    # March and November include both UTC offsets to cover DST transitions.
-    - cron: '30 12,17,23 * 4-10 *'
-    - cron: '0 15,20 * 4-10 *'
-    - cron: '30 13,18 * 12,1,2 *'
-    - cron: '0 16,21 * 12,1,2 *'
-    - cron: '30 0 * 12,1,2 *'
-    - cron: '30 12,13,17,18,23 * 3,11 *'
-    - cron: '0 15,16,20,21 * 3,11 *'
-    - cron: '30 0 * 3,11 *'
+    # Five runs daily. UTC mapping follows EDT March-October and EST November-February.
+    - cron: '30 12,17,23 * 3-10 *'
+    - cron: '0 15,20 * 3-10 *'
+    - cron: '30 13,18 * 11,12,1,2 *'
+    - cron: '0 16,21 * 11,12,1,2 *'
+    - cron: '30 0 * 11,12,1,2 *'
   workflow_dispatch:
 permissions:
   contents: read
