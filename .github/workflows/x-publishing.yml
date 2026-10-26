@@ -22,42 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Check seasonal UTC offset
-        id: offset
-        shell: bash
-        env:
-          CRON_EXPRESSION: ${{ github.event.schedule }}
-        run: |
-          due=true
-          if [[ "$CRON_EXPRESSION" == *"3,11"* ]]; then
-            current_offset="$(TZ=America/New_York date +%z)"
-            # In transition months, skip the other season's UTC schedule.
-            if [[ "$current_offset" == "-0400" ]]; then
-              case "$CRON_EXPRESSION" in
-                "30 12,13,17,18,23 * 3,11 *")
-                  utc_hour="$(date -u +%H)"
-                  [[ "$utc_hour" == 12 || "$utc_hour" == 17 || "$utc_hour" == 23 ]] || due=false ;;
-                "0 15,16,20,21 * 3,11 *")
-                  utc_hour="$(date -u +%H)"
-                  [[ "$utc_hour" == 15 || "$utc_hour" == 20 ]] || due=false ;;
-                *) due=false ;;
-              esac
-            else
-              case "$CRON_EXPRESSION" in
-                "30 12,13,17,18,23 * 3,11 *")
-                  utc_hour="$(date -u +%H)"
-                  [[ "$utc_hour" == 13 || "$utc_hour" == 18 ]] || due=false ;;
-                "0 15,16,20,21 * 3,11 *")
-                  utc_hour="$(date -u +%H)"
-                  [[ "$utc_hour" == 16 || "$utc_hour" == 21 ]] || due=false ;;
-                "30 0 * 3,11 *") due=true ;;
-                *) due=false ;;
-              esac
-            fi
-          fi
-          echo "due=$due" >> "$GITHUB_OUTPUT"
       - name: Publish next eligible X article
-        if: github.event_name == 'workflow_dispatch' || steps.offset.outputs.due == 'true'
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
