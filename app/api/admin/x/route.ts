@@ -8,7 +8,12 @@ export async function GET(req:NextRequest){
  const client=db();
  const [settings,posts,connection]=await Promise.all([client.from('x_settings').select('enabled,daily_limit').eq('id',1).single(),client.from('x_article_posts').select('article_id,status,tweet_id,attempts,last_error,created_at,updated_at').order('created_at',{ascending:false}).limit(50),client.from('x_oauth_connection').select('username,expires_at').eq('id',1).maybeSingle()]);
  if(settings.error||posts.error)return NextResponse.json({error:settings.error?.message||posts.error?.message},{status:500});
- return NextResponse.json({settings:settings.data,posts:posts.data,configured:Boolean(connection.data),username:connection.data?.username||null},{headers:{'Cache-Control':'no-store'}});
+ const articleIds=(posts.data||[]).map(p=>p.article_id);
+ const articles=articleIds.length?await client.from('articles').select('id,title').in('id',articleIds):{data:[],error:null};
+ if(articles.error)return NextResponse.json({error:articles.error.message},{status:500});
+ const titles=new Map((articles.data||[]).map(a=>[a.id,a.title]));
+ const titledPosts=(posts.data||[]).map(p=>({...p,article_title:titles.get(p.article_id)||'Article unavailable'}));
+ return NextResponse.json({settings:settings.data,posts:titledPosts,configured:Boolean(connection.data),username:connection.data?.username||null},{headers:{'Cache-Control':'no-store'}});
 }
 const schema=z.object({enabled:z.boolean(),daily_limit:z.number().int().min(0).max(5)});
 export async function PUT(req:NextRequest){
