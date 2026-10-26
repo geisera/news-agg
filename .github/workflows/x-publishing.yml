@@ -1,11 +1,9 @@
 name: Publish queued X articles
 on:
   schedule:
-    # Run candidate slots in both EDT (UTC-4) and EST (UTC-5).
-    # The local-time guard ensures only the five Eastern slots publish.
-    - cron: '30 12,13,17,18,23 * * *'
-    - cron: '0 15,16,20,21 * * *'
-    - cron: '30 0 * * *'
+    # Poll every 15 minutes in UTC. Supabase determines which Eastern
+    # publishing slots are due and remembers those already claimed.
+    - cron: '0,15,30,45 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,29 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Check Eastern publishing slot
-        id: slot
-        shell: bash
-        run: |
-          local_time="$(TZ=America/New_York date +%H:%M)"
-          # GitHub scheduled workflows can start late. Accept a 45-minute
-          # window after each intended publishing slot, not just its exact minute.
-          local_hour="$(TZ=America/New_York date +%H)"
-          local_minute="$(TZ=America/New_York date +%M)"
-          now_minutes=$((10#$local_hour * 60 + 10#$local_minute))
-          due=false
-          for slot in 510 660 810 960 1170; do
-            if (( now_minutes >= slot && now_minutes < slot + 45 )); then
-              due=true
-              break
-            fi
-          done
-          if [ "$due" = false ]; then
-            echo "Skipping: $local_time Eastern is outside the publishing windows."
-          fi
-          echo "due=$due" >> "$GITHUB_OUTPUT"
-      - name: Publish next eligible article
-        if: github.event_name == 'workflow_dispatch' || steps.slot.outputs.due == 'true'
+      - name: Publish next due X article
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
